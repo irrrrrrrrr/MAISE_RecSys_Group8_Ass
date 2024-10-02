@@ -10,7 +10,7 @@ st.write('Loading datasets...')
 ratings_df = pd.read_csv("Dataset/ratings_splits/temporal_global/filtered/train.csv")
 ratings_df_cleaned = ratings_df.drop(columns=['RatingID', 'Date', 'Vintage']).rename(columns={'WineID': 'item', 'UserID': 'user', 'Rating': 'rating'})
 
-ratings_df_test = pd.read_csv("Dataset/ratings_splits/temporal_global/filtered/test.csv") 
+ratings_df_test = pd.read_csv("Dataset/ratings_splits/temporal_global/filtered/test.csv")
 ratings_df_cleaned_test = ratings_df_test.drop(columns=['RatingID', 'Date', 'Vintage']).rename(columns={'WineID': 'item', 'UserID': 'user', 'Rating': 'rating'})
 
 wines_df = pd.read_csv('Dataset/last/Xwines_Slim_1K_wines.csv', index_col="WineID")
@@ -68,50 +68,37 @@ if selected_user:
     if selected_user in ratings_df_cleaned_test['user'].values:
         st.write(f'Recommendations for User ID {selected_user}:')
 
+        # Get User-User recommendations
         selected_wines_useruser = recsys_user_user.recommend(selected_user, 1000)
         enriched_useruser_recs = enrich_recommendations(selected_wines_useruser, selected_user)
 
         st.subheader('User-User Recommendations')
         st.dataframe(enriched_useruser_recs[['item', 'WineName', 'score', 'Your Rating']])
 
+        # Get Item-Item recommendations
         selected_wines_itemitem = recsys_item_item.recommend(selected_user, 1000)
         enriched_itemitem_recs = enrich_recommendations(selected_wines_itemitem, selected_user)
 
         st.subheader('Item-Item Recommendations')
         st.dataframe(enriched_itemitem_recs[['item', 'WineName', 'score', 'Your Rating']])
 
-        
-        rated_recommendations = []
+        # Create separate dataframes for user-user and item-item recommendations
+        useruser_recs_df = enriched_useruser_recs[['WineName', 'Your Rating', 'score']].rename(columns={'score': 'User-User Score'})
+        itemitem_recs_df = enriched_itemitem_recs[['WineName', 'score']].rename(columns={'score': 'Item-Item Score'})
 
-        # Loop through User-User recommendations
-        for _, row in enriched_useruser_recs.iterrows():
-            if row['Your Rating'] != 'No rating':
-                rated_recommendations.append({
-                    'WineName': row['WineName'],
-                    'Your Rating': row['Your Rating'],
-                    'Score': row['score'],
-                    'Method': 'User-User'
-                })
+        # Merge the two dataframes on WineName
+        merged_recs_df = pd.merge(useruser_recs_df, itemitem_recs_df, on='WineName', how='outer')
 
-        # Loop through Item-Item recommendations
-        for _, row in enriched_itemitem_recs.iterrows():
-            if row['Your Rating'] != 'No rating':
-                rated_recommendations.append({
-                    'WineName': row['WineName'],
-                    'Your Rating': row['Your Rating'],
-                    'Score': row['score'],
-                    'Method': 'Item-Item'
-                })
+        # Convert 'Your Rating' column to numeric for sorting
+        merged_recs_df['Your Rating'] = pd.to_numeric(merged_recs_df['Your Rating'], errors='coerce')
 
-        
-        rated_recommendations_df = pd.DataFrame(rated_recommendations)
-        rated_recommendations_df['Your Rating'] = pd.to_numeric(rated_recommendations_df['Your Rating'], errors='coerce')
-        rated_recommendations_df = rated_recommendations_df.sort_values(by='Your Rating', ascending=False)
+        # Sort the merged dataframe by user rating
+        merged_recs_df = merged_recs_df.sort_values(by='Your Rating', ascending=False)
 
-        
-        if not rated_recommendations_df.empty:
-            st.subheader('Rated Recommendations')
-            st.dataframe(rated_recommendations_df)
+        # Display the final merged dataframe with two score columns
+        if not merged_recs_df.empty:
+            st.subheader('Rated Recommendations (User-User and Item-Item Scores)')
+            st.dataframe(merged_recs_df[['WineName', 'Your Rating', 'User-User Score', 'Item-Item Score']])
         else:
             st.write('No rated recommendations found.')
 
