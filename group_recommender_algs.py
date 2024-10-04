@@ -230,28 +230,37 @@ def category_weights(category_weights_by_user):
         category_weights_sorted[key] = dict(sorted(category_weights[key].items(), key=lambda item: item[1], reverse=True))
     return category_weights_sorted
 
-def get_wine_with_top_categories(wine_data,category_weights_sorted, top_type_index=1, top_body_index=1):
-    top_type = list(category_weights_sorted["Type"].keys())[top_type_index-1]
-    top_body = list(category_weights_sorted["Body"].keys())[top_body_index-1]
+def get_wine_with_top_categories(category_weights_sorted, wine_data, top_type_index=1, top_body_index=1):
+    # Überprüfe, ob die Indizes gültig sind, um IndexError zu vermeiden
+    if top_type_index > len(category_weights_sorted["Type"]) or top_body_index > len(category_weights_sorted["Body"]):
+        return pd.DataFrame()  # Gebe einen leeren DataFrame zurück, wenn keine Weine mehr übrig sind
     
-    # find a wine with these categories
-    selection = wine_data.where((wine_data['Type'] == top_type) & (wine_data['Body'] == top_body)).dropna()
+    # Hole die aktuellen Kategorien basierend auf den Indizes
+    top_type = list(category_weights_sorted["Type"].keys())[top_type_index - 1]
+    top_body = list(category_weights_sorted["Body"].keys())[top_body_index - 1]
     
+    # Suche nach Weinen mit diesen Kategorien
+    selection = wine_data.loc[(wine_data['Type'] == top_type) & (wine_data['Body'] == top_body)]
+
+    # Wenn keine Weine übereinstimmen, erhöhe die Indizes und versuche es erneut
     if selection.shape[0] == 0:
         if top_type_index == top_body_index:
-            selection = get_wine_with_top_categories(category_weights_sorted=category_weights_sorted, top_type_index=top_type_index+1, top_body_index=top_body_index)
+            return get_wine_with_top_categories(category_weights_sorted, wine_data, top_type_index + 1, top_body_index)
         else:
-            selection = get_wine_with_top_categories(category_weights_sorted=category_weights_sorted,top_type_index=top_type_index, top_body_index=top_body_index+1)
-    
-    selection.sort_values(by='AvgRating', ascending=False, inplace=True)
+            return get_wine_with_top_categories(category_weights_sorted, wine_data, top_type_index, top_body_index + 1)
 
+    # Sortiere nach 'AvgRating' und gebe die Top 5 Ergebnisse zurück
+    selection = selection.sort_values(by='AvgRating', ascending=False)
     return selection.head(5)
+
+
 
 def group_rec(group_id, group_data, merged_data,wine_data,ratings_data):
     result_df = recommend_wine_for_group(group_id, group_data, merged_data)
     knn_recommendation_df = recommend_similar_wines_for_group(result_df, merged_data,wine_data,ratings_data, k=10)
     category_weights_by_user = weights_user(knn_recommendation_df)
     category_weights_sorted = category_weights(category_weights_by_user)
-    recommended_wines = get_wine_with_top_categories(wine_data,category_weights_sorted=category_weights_sorted, top_type_index=1, top_body_index=1)
+# Beim Aufruf als Positionsargument verwenden
+    recommended_wines = get_wine_with_top_categories(category_weights_sorted, wine_data, top_type_index=1, top_body_index=1)
     return recommended_wines
     
