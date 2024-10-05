@@ -18,39 +18,44 @@ def avg_ratings(wine_data,ratings_data):
         wine_data.loc[index, "AvgRating"] = ratings[row["WineID"]]["total"]/ratings[row["WineID"]]["count"]
     return wine_data
 # Function to find the best-rated wine or suggest a completely different one if rating < 4
-def recommend_wine_for_user(user_id, merged_data):
-    # Filter wines rated by the specific user
-    user_wines = merged_data[merged_data['UserID'] == user_id]
+def recommend_wine_for_user(user_id, merged_data, recsys=None):
+    if recsys is None:
+        # Filter wines rated by the specific user
+        user_wines = merged_data[merged_data['UserID'] == user_id]
 
-    if user_wines.empty:
-        return f"No wines found for user {user_id}.", None
+        if user_wines.empty:
+            return f"No wines found for user {user_id}.", None
 
-    # Find the wine with the highest rating by the user
-    best_rated_wine = user_wines.loc[user_wines['Rating'].idxmax()]
+        # Find the wine with the highest rating by the user
+        best_rated_wine = user_wines.loc[user_wines['Rating'].idxmax()]
 
-    # If the best rating is 4 or higher, return that wine
-    if best_rated_wine['Rating'] >= 4:
-        return best_rated_wine['WineID'], best_rated_wine['Rating']
+        # If the best rating is 4 or higher, return that wine
+        if best_rated_wine['Rating'] >= 4:
+            return best_rated_wine['WineID'], best_rated_wine['Rating']
 
-    # If no wine has a rating of 4 or higher, find a completely different wine
+        # If no wine has a rating of 4 or higher, find a completely different wine
+        else:
+            # Define characteristics to consider (adjust based on your dataset)
+            characteristics = ['Type', 'Body']
+
+            # Filter out wines that are similar to the one the user rated poorly
+            different_wines = merged_data
+            for char in characteristics:
+                different_wines = different_wines[different_wines[char] != best_rated_wine[char]]
+
+            # If there are still wines left, choose one randomly or based on rating
+            if not different_wines.empty:
+                recommended_wine = different_wines.sample().iloc[0]  # Sample one random different wine
+                return recommended_wine['WineID'], None
+
+            return f"No sufficiently different wines found for user {user_id}.", None
     else:
-        # Define characteristics to consider (adjust based on your dataset)
-        characteristics = ['Type', 'Body']
-
-        # Filter out wines that are similar to the one the user rated poorly
-        different_wines = merged_data
-        for char in characteristics:
-            different_wines = different_wines[different_wines[char] != best_rated_wine[char]]
-
-        # If there are still wines left, choose one randomly or based on rating
-        if not different_wines.empty:
-            recommended_wine = different_wines.sample().iloc[0]  # Sample one random different wine
-            return recommended_wine['WineID'], None
-
-        return f"No sufficiently different wines found for user {user_id}.", None
+        wine = recsys.recommend(user_id, 1)
+        wine.rename(columns={'item': 'wine_id', 'score': 'rating'}, inplace=True)
+        return wine.loc[0, 'wine_id'], wine.loc[0, 'rating']
 
 # Function to recommend wine for a group and output in a DataFrame
-def recommend_wine_for_group(group_id, group_data, merged_data):
+def recommend_wine_for_group(group_id, group_data, merged_data, individual_recsys):
     # Get the group members from the group data
     group_info = group_data[group_data['group_id'] == group_id].iloc[0]
     group_members = eval(group_info['group_members'])  # Assuming group_members is a list stored as a string
@@ -60,7 +65,7 @@ def recommend_wine_for_group(group_id, group_data, merged_data):
 
     # Loop through each member of the group and get their favorite wine
     for user_id in group_members:
-        wine_id, rating = recommend_wine_for_user(user_id, merged_data)
+        wine_id, rating = recommend_wine_for_user(user_id, merged_data, individual_recsys)
         recommendations.append({
             'group_id': group_id,
             'user_id': user_id,
@@ -253,10 +258,8 @@ def get_wine_with_top_categories(category_weights_sorted, wine_data, top_type_in
     selection = selection.sort_values(by='AvgRating', ascending=False)
     return selection.head(5)
 
-
-
-def group_rec(group_id, group_data, merged_data,wine_data,ratings_data):
-    result_df = recommend_wine_for_group(group_id, group_data, merged_data)
+def group_rec(group_id, group_data, merged_data,wine_data,ratings_data, individual_recsys):
+    result_df = recommend_wine_for_group(group_id, group_data, merged_data, individual_recsys)
     knn_recommendation_df = recommend_similar_wines_for_group(result_df, merged_data,wine_data,ratings_data, k=10)
     category_weights_by_user = weights_user(knn_recommendation_df)
     category_weights_sorted = category_weights(category_weights_by_user)

@@ -17,7 +17,7 @@ st.write("Enter a Group ID (0-239)")
 group_id = st.number_input('Enter Group ID:', min_value=0, max_value=239, value=0)
 
 if st.button("Get Recommendations"):
-    recommended_wines = group_rec(group_id, group_data, merged_data,wine_data,ratings_data)
+    recommended_wines = group_rec(group_id, group_data, merged_data,wine_data,ratings_data, None)
     if isinstance(recommended_wines, str):
         st.write(recommended_wines)
     else:
