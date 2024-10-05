@@ -18,7 +18,7 @@ wines_df['WineID'] = wines_df.index
 
 st.title('Group Wine Recommendation System')
 
-# Input multiple users
+
 selected_users = st.text_input('Enter User IDs (comma-separated):', '1188855, 1234567')
 selected_users = [int(u.strip()) for u in selected_users.split(',')]
 
@@ -71,38 +71,27 @@ def get_combined_recommendations(selected_users):
             enriched_itemitem = enrich_recommendations(user_recs_itemitem, user)
             combined_recs_itemitem = pd.concat([combined_recs_itemitem, enriched_itemitem])
 
-    # Aggregate scores (e.g., averaging)
+    
     agg_useruser = combined_recs_useruser.groupby('item').agg({'score': 'mean', 'WineName': 'first'}).reset_index()
     agg_itemitem = combined_recs_itemitem.groupby('item').agg({'score': 'mean', 'WineName': 'first'}).reset_index()
 
-    # Merge the two aggregated recommendation lists
+    
     merged_recs = pd.merge(agg_useruser, agg_itemitem, on='item', suffixes=('_useruser', '_itemitem'))
     
-    # Rename the columns after merging to avoid missing columns error
+    
     merged_recs.rename(columns={'score_useruser': 'User-User Score', 'score_itemitem': 'Item-Item Score'}, inplace=True)
 
     return merged_recs
 
-# Display the recommendations
-# Display the recommendations
+
 if selected_users:
-    st.write(f'Combined recommendations for User IDs {selected_users}:')
-    
+    st.write(f'Combined recommendations for User IDs {selected_users}:')  
     combined_recs = get_combined_recommendations(selected_users)
-    
-    # Check the column names in combined_recs to debug
-    st.write('Columns in combined_recs:', combined_recs.columns)
-    
-    # Display the first few rows of combined_recs for further inspection
+    st.write('Columns in combined_recs:', combined_recs.columns)  
     st.write('First few rows of combined_recs:')
     st.dataframe(combined_recs.head())
-
-    
-    # Display two separate tables for User-User and Item-Item recommendations
     if 'WineName_useruser' in combined_recs.columns and 'User-User Score' in combined_recs.columns:
         st.subheader('Top User-User Recommendations')
-        
-        # Display only User-User recommendations with corresponding wine names and scores
         useruser_recs = combined_recs[['WineName_useruser', 'User-User Score']].dropna().sort_values(by='User-User Score', ascending=False)
         useruser_recs = useruser_recs.rename(columns={'WineName_useruser': 'WineName'})
         st.dataframe(useruser_recs)
@@ -111,8 +100,6 @@ if selected_users:
 
     if 'WineName_itemitem' in combined_recs.columns and 'Item-Item Score' in combined_recs.columns:
         st.subheader('Top Item-Item Recommendations')
-        
-        # Display only Item-Item recommendations with corresponding wine names and scores
         itemitem_recs = combined_recs[['WineName_itemitem', 'Item-Item Score']].dropna().sort_values(by='Item-Item Score', ascending=False)
         itemitem_recs = itemitem_recs.rename(columns={'WineName_itemitem': 'WineName'})
         st.dataframe(itemitem_recs)
