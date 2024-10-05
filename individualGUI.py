@@ -4,23 +4,18 @@ from lenskit.algorithms import Recommender
 from lenskit.algorithms.user_knn import UserUser
 from lenskit.algorithms.item_knn import ItemItem
 
-# Load datasets
 st.write('Loading datasets...')
 ratings_df = pd.read_csv("Dataset/ratings_splits/temporal_global/filtered/train.csv")
 ratings_df_cleaned = ratings_df.drop(columns=['RatingID', 'Date', 'Vintage']).rename(columns={'WineID': 'item', 'UserID': 'user', 'Rating': 'rating'})
-
 ratings_df_test = pd.read_csv("Dataset/ratings_splits/temporal_global/filtered/test.csv")
 ratings_df_cleaned_test = ratings_df_test.drop(columns=['RatingID', 'Date', 'Vintage']).rename(columns={'WineID': 'item', 'UserID': 'user', 'Rating': 'rating'})
-
 wines_df = pd.read_csv('Dataset/last/Xwines_Slim_1K_wines.csv', index_col="WineID")
 wines_df['WineID'] = wines_df.index
 
-# User interface and input
 st.title('Wine Recommendation System')
 st.write('Enter a user ID to get recommendations using User-User and Item-Item algorithms.')
 selected_user = st.number_input('Enter User ID:', min_value=1, value=1188855)
 
-# Fitting recommendation algorithms
 st.write('Fitting User-User algorithm...')
 user_user = UserUser(15, min_nbrs=3)
 recsys_user_user = Recommender.adapt(user_user)
@@ -31,7 +26,6 @@ itemitem = ItemItem(15, min_nbrs=3)
 recsys_item_item = Recommender.adapt(itemitem)
 recsys_item_item.fit(ratings_df_cleaned)
 
-# Function to enrich recommendations with wine names and detailed explanations
 def enrich_recommendations(recs_df, user_id, algorithm_type):
     wine_names = []
     user_ratings = []
@@ -42,14 +36,8 @@ def enrich_recommendations(recs_df, user_id, algorithm_type):
 
         if not wine_row.empty:
             wine_name = wine_row.iloc[0]['WineName']
-
-            # Use `RegionName` and correctly format `Grapes`
             region = wine_row.iloc[0]['RegionName'] if 'RegionName' in wine_row.columns and pd.notna(wine_row.iloc[0]['RegionName']) else 'Unknown Region'
-
-            # Remove any unwanted characters and format the grapes string properly
             grapes = wine_row.iloc[0]['Grapes'] if 'Grapes' in wine_row.columns and pd.notna(wine_row.iloc[0]['Grapes']) else 'Unknown Grapes'
-            
-            # Clean up any unwanted characters (like brackets and quotes) from the string
             if grapes and grapes != 'Unknown Grapes':
                 grapes = grapes.replace('[', '').replace(']', '').replace("'", "").strip()
 
@@ -60,7 +48,6 @@ def enrich_recommendations(recs_df, user_id, algorithm_type):
             grapes = 'Unknown Grapes'
             wine_names.append(wine_name)
 
-        # Find user's rating in the test dataset
         user_rating_row = ratings_df_cleaned_test[(ratings_df_cleaned_test['user'] == user_id)]
         user_rating_wine_row = user_rating_row[user_rating_row['item'] == row['item']]
 
@@ -70,8 +57,6 @@ def enrich_recommendations(recs_df, user_id, algorithm_type):
         else:
             user_rating = 'No rating'
             user_ratings.append(user_rating)
-
-        # Create more specific explanations based on the algorithm type
         if algorithm_type == 'User-User':
             explanation = (f"This wine is recommended because users with similar preferences to you gave it an average rating of {row['score']:.2f}. "
                            f"For example, users who rated wines like {wine_name} highly have also enjoyed other wines from the {region} region, "
@@ -92,28 +77,22 @@ def enrich_recommendations(recs_df, user_id, algorithm_type):
 
     return recs_df
 
-
-
-
-# Function to recommend top wines based on overall ratings
 def recommend_top_wines():
     avg_ratings = ratings_df_cleaned.groupby('item').rating.mean().reset_index()
     top_wines = avg_ratings.sort_values(by='rating', ascending=False).head(10)
     top_wines_enriched = enrich_recommendations(top_wines, None, 'Popularity')
     return top_wines_enriched
 
-# Display recommendations for the user
+
 if selected_user:
     if selected_user in ratings_df_cleaned_test['user'].values:
         st.write(f'Recommendations for User ID {selected_user}:')
 
-        # User-User Recommendations
         selected_wines_useruser = recsys_user_user.recommend(selected_user, 1000)
         enriched_useruser_recs = enrich_recommendations(selected_wines_useruser, selected_user, 'User-User')
         st.subheader('User-User Recommendations')
         st.dataframe(enriched_useruser_recs[['item', 'WineName', 'score', 'Your Rating']])
 
-        # Allow selection and display for User-User explanations
         user_user_wine_selection = st.selectbox(
             'Select a wine from User-User recommendations to view detailed explanation:',
             options=enriched_useruser_recs['WineName'].tolist(),
@@ -124,13 +103,11 @@ if selected_user:
             user_user_explanation = enriched_useruser_recs.loc[enriched_useruser_recs['WineName'] == user_user_wine_selection, 'Explanation'].values[0]
             st.write(f"**Explanation for {user_user_wine_selection} (User-User):** {user_user_explanation}")
 
-        # Item-Item Recommendations
         selected_wines_itemitem = recsys_item_item.recommend(selected_user, 1000)
         enriched_itemitem_recs = enrich_recommendations(selected_wines_itemitem, selected_user, 'Item-Item')
         st.subheader('Item-Item Recommendations')
         st.dataframe(enriched_itemitem_recs[['item', 'WineName', 'score', 'Your Rating']])
 
-        # Allow selection and display for Item-Item explanations
         item_item_wine_selection = st.selectbox(
             'Select a wine from Item-Item recommendations to view detailed explanation:',
             options=enriched_itemitem_recs['WineName'].tolist(),
@@ -147,7 +124,6 @@ if selected_user:
         st.subheader('Top Rated Wines')
         st.dataframe(top_wines[['item', 'WineName', 'rating']])
 
-        # Allow selection of top-rated wines for explanations
         wine_selection = st.selectbox(
             'Select a wine to view detailed explanation:',
             options=top_wines['WineName'].tolist(),

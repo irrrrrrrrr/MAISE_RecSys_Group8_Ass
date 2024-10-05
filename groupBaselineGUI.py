@@ -16,10 +16,9 @@ ratings_df_cleaned_test = ratings_df_test.drop(columns=['RatingID', 'Date', 'Vin
 wines_df = pd.read_csv('Dataset/last/Xwines_Slim_1K_wines.csv', index_col="WineID")
 wines_df['WineID'] = wines_df.index
 
-st.title('Group Wine Recommendation System')
+st.title('Baseline Group Recommendation System')
 
-
-selected_users = st.text_input('Enter User IDs (comma-separated):', '1188855, 1234567')
+selected_users = st.text_input('Enter User IDs:', '1188855, 1164877')
 selected_users = [int(u.strip()) for u in selected_users.split(',')]
 
 st.write('Fitting User-User algorithm...')
@@ -35,7 +34,6 @@ recsys_item_item.fit(ratings_df_cleaned)
 def enrich_recommendations(recs_df, user_id):
     wine_names = []
     user_ratings = []
-
     for _, row in recs_df.iterrows():
         wine_row = wines_df[wines_df['WineID'] == row['item']]
         
@@ -75,14 +73,11 @@ def get_combined_recommendations(selected_users):
     agg_useruser = combined_recs_useruser.groupby('item').agg({'score': 'mean', 'WineName': 'first'}).reset_index()
     agg_itemitem = combined_recs_itemitem.groupby('item').agg({'score': 'mean', 'WineName': 'first'}).reset_index()
 
-    
     merged_recs = pd.merge(agg_useruser, agg_itemitem, on='item', suffixes=('_useruser', '_itemitem'))
-    
     
     merged_recs.rename(columns={'score_useruser': 'User-User Score', 'score_itemitem': 'Item-Item Score'}, inplace=True)
 
     return merged_recs
-
 
 if selected_users:
     st.write(f'Combined recommendations for User IDs {selected_users}:')  
@@ -95,15 +90,12 @@ if selected_users:
         useruser_recs = combined_recs[['WineName_useruser', 'User-User Score']].dropna().sort_values(by='User-User Score', ascending=False)
         useruser_recs = useruser_recs.rename(columns={'WineName_useruser': 'WineName'})
         st.dataframe(useruser_recs)
-    else:
-        st.write('Error: User-User recommendations not found!')
-
+    
     if 'WineName_itemitem' in combined_recs.columns and 'Item-Item Score' in combined_recs.columns:
         st.subheader('Top Item-Item Recommendations')
         itemitem_recs = combined_recs[['WineName_itemitem', 'Item-Item Score']].dropna().sort_values(by='Item-Item Score', ascending=False)
         itemitem_recs = itemitem_recs.rename(columns={'WineName_itemitem': 'WineName'})
         st.dataframe(itemitem_recs)
-    else:
-        st.write('Error: Item-Item recommendations not found!')
+    
 
 
