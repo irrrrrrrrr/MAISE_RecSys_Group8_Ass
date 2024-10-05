@@ -7,13 +7,13 @@ from lenskit.algorithms.user_knn import UserUser
 from lenskit.algorithms.item_knn import ItemItem
 
 st.write('Loading datasets...')
-ratings_df = pd.read_csv("Dataset/ratings_splits/temporal_global/filtered/train.csv")
+ratings_df = pd.read_csv("../../Dataset/ratings_splits/temporal_global/filtered/train.csv")
 ratings_df_cleaned = ratings_df.drop(columns=['RatingID', 'Date', 'Vintage']).rename(columns={'WineID': 'item', 'UserID': 'user', 'Rating': 'rating'})
 
-ratings_df_test = pd.read_csv("Dataset/ratings_splits/temporal_global/filtered/test.csv")
+ratings_df_test = pd.read_csv("../../Dataset/ratings_splits/temporal_global/filtered/test.csv")
 ratings_df_cleaned_test = ratings_df_test.drop(columns=['RatingID', 'Date', 'Vintage']).rename(columns={'WineID': 'item', 'UserID': 'user', 'Rating': 'rating'})
 
-wines_df = pd.read_csv('Dataset/last/Xwines_Slim_1K_wines.csv', index_col="WineID")
+wines_df = pd.read_csv('../../Dataset/last/Xwines_Slim_1K_wines.csv', index_col="WineID")
 wines_df['WineID'] = wines_df.index
 
 st.title('Baseline Group Recommendation System')
