@@ -2,106 +2,201 @@ import pandas as pd
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import OneHotEncoder
 
-import pandas as pd
-from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
-# Funktion zur Berechnung der durchschnittlichen Bewertungen
 def avg_ratings(wine_data, ratings_data):
+    """
+    Calculate the average ratings for each wine and add it as a column 'AvgRating' in wine_data.
+    """
+    # Initialisiere ein Dictionary zur Speicherung der Ratings
     ratings = {}
-    for index, row in ratings_data.iterrows():
-        if row['WineID'] not in ratings:
-            ratings[row['WineID']] = {"total": row['Rating'], "count": 1}
-        else:
-            ratings[row['WineID']]["total"] += row['Rating']
-            ratings[row['WineID']]["count"] += 1
+    for _, row in ratings_data.iterrows():
+        wine_id = row['WineID']
+        if pd.notna(wine_id):
+            if wine_id not in ratings:
+                ratings[wine_id] = {"total": 0, "count": 0}
+            ratings[wine_id]["total"] += row["Rating"]
+            ratings[wine_id]["count"] += 1
 
-    # Füge die durchschnittlichen Bewertungen dem DataFrame hinzu
-    wine_data["AvgRating"] = 0.0
+    # Überprüfen, ob 'WineID' in ratings existiert, bevor 'AvgRating' berechnet wird
     for index, row in wine_data.iterrows():
-        wine_data.at[index, "AvgRating"] = ratings[row["WineID"]]["total"] / ratings[row["WineID"]]["count"]
+        wine_id = row["WineID"]
+        if wine_id in ratings:
+            wine_data.at[index, "AvgRating"] = ratings[wine_id]["total"] / ratings[wine_id]["count"]
+        else:
+            wine_data.at[index, "AvgRating"] = None  # Setze 'AvgRating' auf None, wenn keine Bewertungen vorhanden sind
+
     return wine_data
 
-
-# Empfehlung basierend auf Benutzerpräferenzen
+# Function to find the best-rated wine or suggest a completely different one if rating < 4
 def recommend_wine_for_user(user_id, merged_data, recsys=None):
     if recsys is None:
-        # Filtere Weine, die vom Benutzer bewertet wurden
+        # Filter wines rated by the specific user
         user_wines = merged_data[merged_data['UserID'] == user_id]
+
         if user_wines.empty:
             return f"No wines found for user {user_id}.", None
 
-        # Finde den Wein mit der höchsten Bewertung des Benutzers
+        # Find the wine with the highest rating by the user
         best_rated_wine = user_wines.loc[user_wines['Rating'].idxmax()]
 
-        # Wenn die Bewertung >= 4 ist, gebe diesen Wein zurück
+        # If the best rating is 4 or higher, return that wine
         if best_rated_wine['Rating'] >= 4:
-            explanation = f"The wine '{best_rated_wine['WineID']}' is recommended because it is your highest-rated wine."
-            return best_rated_wine['WineID'], explanation
+            return best_rated_wine['WineID'], best_rated_wine['Rating']
 
-        # Wenn kein Wein eine hohe Bewertung hat, schlage einen anderen Wein vor
-        different_wines = merged_data
-        characteristics = ['Type', 'Body']
-        for char in characteristics:
-            different_wines = different_wines[different_wines[char] != best_rated_wine[char]]
-        
-        if not different_wines.empty:
-            recommended_wine = different_wines.sample().iloc[0]
-            explanation = (f"The wine '{recommended_wine['WineID']}' is recommended because it is different from the wines you've rated low, "
-                           f"with characteristics such as {recommended_wine['Type']} and {recommended_wine['Body']}.")
-            return recommended_wine['WineID'], explanation
+        # If no wine has a rating of 4 or higher, find a completely different wine
+        else:
+            # Define characteristics to consider (adjust based on your dataset)
+            characteristics = ['Type', 'Body']
 
-        return f"No sufficiently different wines found for user {user_id}.", None
+            # Filter out wines that are similar to the one the user rated poorly
+            different_wines = merged_data
+            for char in characteristics:
+                different_wines = different_wines[different_wines[char] != best_rated_wine[char]]
+
+            # If there are still wines left, choose one randomly or based on rating
+            if not different_wines.empty:
+                recommended_wine = different_wines.sample().iloc[0]  # Sample one random different wine
+                return recommended_wine['WineID'], None
+
+            return f"No sufficiently different wines found for user {user_id}.", None
     else:
         wine = recsys.recommend(user_id, 1)
         wine.rename(columns={'item': 'wine_id', 'score': 'rating'}, inplace=True)
-        explanation = f"The wine '{wine.loc[0, 'wine_id']}' is recommended based on collaborative filtering."
-        return wine.loc[0, 'wine_id'], explanation
+        return wine.loc[0, 'wine_id'], wine.loc[0, 'rating']
 
-
-# Funktion zur Generierung einer Gruppenempfehlung
+# Function to recommend wine for a group and output in a DataFrame
 def recommend_wine_for_group(group_id, group_data, merged_data, individual_recsys):
+    # Get the group members from the group data
     group_info = group_data[group_data['group_id'] == group_id].iloc[0]
-    group_members = eval(group_info['group_members'])
+    group_members = eval(group_info['group_members'])  # Assuming group_members is a list stored as a string
 
-    # Empfehlung für jedes Gruppenmitglied
+    # Create a list to store each user's recommendation
     recommendations = []
+
+    # Loop through each member of the group and get their favorite wine
     for user_id in group_members:
-        wine_id, explanation = recommend_wine_for_user(user_id, merged_data, individual_recsys)
+        wine_id, rating = recommend_wine_for_user(user_id, merged_data, individual_recsys)
         recommendations.append({
             'group_id': group_id,
             'user_id': user_id,
             'wine_id': wine_id,
-            'explanation': explanation
+            'rating': rating if rating is not None else 'Suggested different wine'
         })
 
-    # Ergebnis als DataFrame zurückgeben
-    return pd.DataFrame(recommendations)
+    # Convert the recommendations to a DataFrame
+    recommendation_df = pd.DataFrame(recommendations)
+    return recommendation_df
 
+# # Function to find the top-rated wine by a user and recommend similar wines using KNN
+# def recommend_similar_wines(user_id, merged_data, k=10):
+#     # Filter the wines rated by the specific user
+#     user_wines = merged_data[merged_data['UserID'] == user_id]
 
-# Suche nach ähnlichen Weinen mit KNN
+#     if user_wines.empty:
+#         return f"No wines found for user {user_id}."
+
+#     # Find the top-rated wine for this user
+#     top_rated_wine = user_wines.loc[user_wines['Rating'].idxmax()]
+
+#     # Extract relevant features (e.g., 'Type', 'Body') for KNN
+#     features = ['Type', 'Body']  # Adjust based on your dataset
+
+#     # Prepare the dataset for KNN (focus on wine characteristics, exclude 'WineID')
+#     wine_features = merged_data[features]
+
+#     # Apply OneHotEncoding to handle categorical variables like 'Type' and 'Body'
+#     encoder = OneHotEncoder(sparse_output=False)
+#     encoded_wine_features = encoder.fit_transform(wine_features)
+
+#     # Fit KNN model
+#     knn_model = NearestNeighbors(n_neighbors=k, metric='euclidean')
+#     knn_model.fit(encoded_wine_features)
+
+#     # Encode the top-rated wine's features (ensure it is passed as a DataFrame with feature names)
+#     top_rated_wine_features = pd.DataFrame([top_rated_wine[features]], columns=features)
+#     encoded_top_rated_wine_features = encoder.transform(top_rated_wine_features)
+
+#     # Find K nearest wines to the top-rated wine
+#     distances, indices = knn_model.kneighbors(encoded_top_rated_wine_features)
+
+#     # Get the recommended similar wines (excluding the top-rated wine itself)
+#     recommended_wines = merged_data.iloc[indices[0]]
+
+#     # Exclude the top-rated wine itself from the recommendations
+#     recommended_wines = recommended_wines[recommended_wines['WineID'] != top_rated_wine['WineID']]
+
+#     return recommended_wines[['WineID', 'Type', 'Body']]
+
 def find_knn_for_wine(wine_id, merged_data, user_id, wine_df, ratings_df, k=10):
-    features = ['Type', 'Body']
-    wine_features = merged_data[features]
+    """
+    Findet ähnliche Weine basierend auf KNN (K-Nearest Neighbors) für einen gegebenen Wein.
+    Parameter:
+    - wine_id: Die ID des Zielweins
+    - merged_data: Der kombinierte DataFrame mit Weininformationen und Bewertungen
+    - user_id: Die ID des Benutzers (wird in der aktuellen Implementierung nicht verwendet)
+    - wine_df: Der DataFrame mit den Weindetails
+    - ratings_df: Der DataFrame mit den Benutzerbewertungen
+    - k: Anzahl der nächste Nachbarn (Default = 10)
+
+    Rückgabe:
+    - Eine Liste mit empfohlenen Weinen oder eine Fehlermeldung
+    """
+    features = ['Type', 'Body']  # Die Merkmale, die für die KNN-Berechnung verwendet werden
+
+    # Überprüfen Sie, ob die erforderlichen Spalten im DataFrame vorhanden sind
+    if not all([col in merged_data.columns for col in features]):
+        raise ValueError(f"Die erforderlichen Spalten {features} sind nicht in 'merged_data' vorhanden. Aktuelle Spalten: {merged_data.columns.tolist()}")
+
+    # Entferne Zeilen mit NaN-Werten in den Merkmalen 'Type' und 'Body'
+    wine_features = merged_data[features].dropna()
+
+
+    # Überprüfen Sie, ob der DataFrame nach der Bereinigung leer ist
+    if wine_features.empty:
+        # Geben Sie eine detaillierte Fehlermeldung aus, wenn `wine_features` leer ist
+        raise ValueError(f"Die wine_features DataFrame ist leer. Stellen Sie sicher, dass die Spalten 'Type' und 'Body' gültige Werte enthalten. "
+                         f"Aktuelle Verteilung in merged_data:\n"
+                         f"Type: {merged_data['Type'].value_counts(dropna=False)}\n"
+                         f"Body: {merged_data['Body'].value_counts(dropna=False)}")
+
+    # Initialisiere den OneHotEncoder
     encoder = OneHotEncoder(sparse_output=False)
+
+    # Debugging-Ausgabe: Zeige eine Stichprobe der `wine_features`-Daten vor der Transformation
+
+
+    # Transformiere die Merkmale in eine One-Hot-encoded Matrix
     encoded_wine_features = encoder.fit_transform(wine_features)
 
+
+    # Initialisiere und trainiere das KNN-Modell mit den kodierten Merkmalen
     knn_model = NearestNeighbors(n_neighbors=k, metric='euclidean')
     knn_model.fit(encoded_wine_features)
 
+    # Hole die Merkmale des Zielweins basierend auf `wine_id`
     target_wine = merged_data[merged_data['WineID'] == wine_id]
     if target_wine.empty:
         return f"No wine found with WineID {wine_id}."
 
-    target_wine_features = target_wine[features]
+    # Extrahiere die Merkmale des Zielweins
+    target_wine_features = target_wine[features].dropna()
+
+
+    # Überprüfen, ob das Zielwein-Feature leer ist
+    if target_wine_features.empty:
+        return f"No valid target wine features found for WineID {wine_id}. Überprüfen Sie die Spalten 'Type' und 'Body'."
+
+    # Transformiere die Merkmale des Zielweins
     encoded_target_wine_features = encoder.transform(target_wine_features)
 
+
+    # Berechne die nächsten Nachbarn (KNN)
     distances, indices = knn_model.kneighbors(encoded_target_wine_features)
     recommended_wines = merged_data.iloc[indices[0]]
+
+    # Entferne den Zielwein aus den Empfehlungen (falls vorhanden)
     recommended_wines = recommended_wines[recommended_wines['WineID'] != wine_id]
 
+    # Konvertiere die Empfehlungen in eine Liste von Dictionaries
     recommended_list = recommended_wines[['WineID', 'Type', 'Body', 'Rating']].to_dict(orient='records')
     return recommended_list
 
@@ -210,4 +305,3 @@ def group_rec(group_id, group_data, merged_data,wine_data,ratings_data, individu
 # Beim Aufruf als Positionsargument verwenden
     recommended_wines = get_wine_with_top_categories(category_weights_sorted, wine_data, top_type_index=1, top_body_index=1)
     return recommended_wines
-    
