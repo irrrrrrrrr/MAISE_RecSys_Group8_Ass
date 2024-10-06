@@ -64,7 +64,7 @@ def recommend_wine_for_user(user_id, merged_data, recsys=None):
         return wine.loc[0, 'wine_id'], wine.loc[0, 'rating']
 
 # Function to recommend wine for a group and output in a DataFrame
-def recommend_wine_for_group(group_id, group_data, merged_data, individual_recsys):
+def recommend_wine_for_group(group_id, group_data, merged_data):
     # Get the group members from the group data
     group_info = group_data[group_data['group_id'] == group_id].iloc[0]
     group_members = eval(group_info['group_members'])  # Assuming group_members is a list stored as a string
@@ -74,7 +74,7 @@ def recommend_wine_for_group(group_id, group_data, merged_data, individual_recsy
 
     # Loop through each member of the group and get their favorite wine
     for user_id in group_members:
-        wine_id, rating = recommend_wine_for_user(user_id, merged_data, individual_recsys)
+        wine_id, rating = recommend_wine_for_user(user_id, merged_data)
         recommendations.append({
             'group_id': group_id,
             'user_id': user_id,
@@ -297,8 +297,8 @@ def get_wine_with_top_categories(category_weights_sorted, wine_data, top_type_in
     selection = selection.sort_values(by='AvgRating', ascending=False)
     return selection.head(5)
 
-def group_rec(group_id, group_data, merged_data,wine_data,ratings_data, individual_recsys):
-    result_df = recommend_wine_for_group(group_id, group_data, merged_data, individual_recsys)
+def group_rec(group_id, group_data, merged_data,wine_data,ratings_data):
+    result_df = recommend_wine_for_group(group_id, group_data, merged_data)
     knn_recommendation_df = recommend_similar_wines_for_group(result_df, merged_data,wine_data,ratings_data, k=10)
     category_weights_by_user = weights_user(knn_recommendation_df)
     category_weights_sorted = category_weights(category_weights_by_user)
